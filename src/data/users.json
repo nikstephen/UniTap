@@ -1,0 +1,6 @@
+[
+  { "id": "usr-student-01", "username": "maria.santos", "email": "maria.santos@demo.unitap.edu", "demoPassword": "student123", "roles": ["student"], "status": "active", "createdAt": "2026-01-10T08:00:00.000Z", "updatedAt": "2026-01-10T08:00:00.000Z" },
+  { "id": "usr-officer-01", "username": "jordan.reyes", "email": "jordan.reyes@demo.unitap.edu", "demoPassword": "officer123", "roles": ["csg_officer"], "status": "active", "createdAt": "2026-01-11T08:00:00.000Z", "updatedAt": "2026-01-11T08:00:00.000Z" },
+  { "id": "usr-admin-01", "username": "alex.delacruz", "email": "alex.delacruz@demo.unitap.edu", "demoPassword": "admin123", "roles": ["csg_administrator"], "status": "active", "createdAt": "2026-01-12T08:00:00.000Z", "updatedAt": "2026-01-12T08:00:00.000Z" },
+  { "id": "usr-multirole-01", "username": "sam.lim", "email": "sam.lim@demo.unitap.edu", "demoPassword": "multi123", "roles": ["student", "csg_officer"], "status": "active", "createdAt": "2026-01-13T08:00:00.000Z", "updatedAt": "2026-01-13T08:00:00.000Z" }
+]

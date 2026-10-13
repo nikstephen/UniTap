@@ -1,0 +1,1 @@
+[{ "id": "student", "name": "BSIT Student", "description": "View your student record and academic history." }, { "id": "csg_officer", "name": "CSG Officer", "description": "Access permitted CSG operational information." }, { "id": "csg_administrator", "name": "CSG Administrator", "description": "Manage accounts, academics, students, and devices." }]
