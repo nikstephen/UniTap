@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   IonBadge,
   IonButton,
@@ -22,12 +22,36 @@ import {
   IonToolbar,
 } from "@ionic/react";
 import { createAdminAccount, getUser, logout } from "../services/authService";
-import { createId, getRecords, saveRecords } from "../services/storageService";
+import { isSupabaseConfigured } from "../lib/supabase";
+import {
+  createSupabaseAccount,
+  getAdminAccounts,
+  setAccountActive,
+} from "../services/adminAccountService";
+import {
+  assignStudentToSection,
+  getAssignmentData,
+} from "../services/assignmentService";
+import {
+  getAdminDevices,
+  registerDevice,
+  setDeviceStatus,
+} from "../services/deviceService";
+import { getRecords, saveRecords } from "../services/storageService";
+import {
+  activateAcademicTerm,
+  createAcademicTerm,
+  createSection,
+  getAcademicStructure,
+} from "../services/academicService";
 import type {
   AcademicTerm,
+  AuthorizedDevice,
   DemoSession,
   RoleId,
   Section,
+  StudentProfile,
+  User,
 } from "../types/models";
 import "./AppPages.css";
 
@@ -41,11 +65,16 @@ const AdminDashboardPage = ({
   const [tab, setTab] = useState("overview");
   const [revision, setRevision] = useState(0);
   const [accountMessage, setAccountMessage] = useState("");
-  const terms = getRecords("terms");
-  const sections = getRecords("sections");
-  const students = getRecords("students");
-  const devices = getRecords("devices");
-  const users = getRecords("users");
+  const [terms, setTerms] = useState<AcademicTerm[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [structureMessage, setStructureMessage] = useState("");
+  const [students, setStudents] = useState<StudentProfile[]>(() =>
+    getRecords("students"),
+  );
+  const [devices, setDevices] = useState<AuthorizedDevice[]>(() =>
+    getRecords("devices"),
+  );
+  const [users, setUsers] = useState<User[]>(() => getRecords("users"));
   const [newTerm, setNewTerm] = useState({
     academicYear: "",
     semester: "First",
@@ -55,17 +84,71 @@ const AdminDashboardPage = ({
   const [newSection, setNewSection] = useState({
     name: "",
     yearLevel: "1",
-    term: terms.find((item) => item.status === "active")?.id ?? "",
+    term: "",
   });
   const [newAccount, setNewAccount] = useState({
     username: "",
     email: "",
     password: "",
+    firstName: "",
+    lastName: "",
+    studentNumber: "",
     role: "student" as RoleId,
   });
+  const [newAssignment, setNewAssignment] = useState({
+    studentId: "",
+    sectionId: "",
+    yearLevel: "1",
+  });
+  const [newDevice, setNewDevice] = useState({
+    officerId: "",
+    deviceUid: "",
+    deviceModel: "",
+  });
+  useEffect(() => {
+    void getAcademicStructure()
+      .then((structure) => {
+        setTerms(structure.terms);
+        setSections(structure.sections);
+        setNewSection((current) => ({
+          ...current,
+          term:
+            current.term ||
+            structure.terms.find((item) => item.status === "active")?.id ||
+            structure.terms[0]?.id ||
+            "",
+        }));
+      })
+      .catch(() => setStructureMessage("Unable to load academic records."));
+  }, []);
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    void getAdminDevices()
+      .then(setDevices)
+      .catch(() => setStructureMessage("Unable to load authorized devices."));
+  }, []);
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    void getAssignmentData()
+      .then((data) => {
+        setStudents(data.students);
+        setNewAssignment((current) => ({
+          ...current,
+          studentId: current.studentId || data.students[0]?.id || "",
+          sectionId: current.sectionId || data.sections[0]?.id || "",
+        }));
+      })
+      .catch(() => setStructureMessage("Unable to load student assignments."));
+  }, []);
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    void getAdminAccounts()
+      .then(setUsers)
+      .catch(() => setAccountMessage("Unable to load accounts."));
+  }, []);
   void revision;
 
-  const addTerm = () => {
+  const addTerm = async () => {
     if (
       !newTerm.academicYear ||
       !newTerm.startDate ||
@@ -78,24 +161,24 @@ const AdminDashboardPage = ({
       )
     )
       return;
-    saveRecords("terms", [
-      ...terms,
-      {
-        ...newTerm,
-        id: createId("term"),
+    try {
+      const term = await createAcademicTerm({
+        academicYear: newTerm.academicYear,
         semester: newTerm.semester as AcademicTerm["semester"],
-        status: "planned",
-      },
-    ]);
-    setNewTerm({
-      academicYear: "",
-      semester: "First",
-      startDate: "",
-      endDate: "",
-    });
-    setRevision(revision + 1);
+      });
+      setTerms([...terms, term]);
+      setNewTerm({
+        academicYear: "",
+        semester: "First",
+        startDate: "",
+        endDate: "",
+      });
+      setStructureMessage("Academic term created.");
+    } catch {
+      setStructureMessage("Unable to create academic term.");
+    }
   };
-  const addSection = () => {
+  const addSection = async () => {
     if (
       !newSection.name ||
       sections.some(
@@ -105,40 +188,148 @@ const AdminDashboardPage = ({
       )
     )
       return;
-    saveRecords("sections", [
-      ...sections,
-      {
-        id: createId("section"),
-        name: newSection.name.toUpperCase(),
-        yearLevel: Number(newSection.yearLevel),
-        academicTermId: newSection.term,
-        status: "active",
-      } as Section,
-    ]);
-    setNewSection({ ...newSection, name: "" });
-    setRevision(revision + 1);
+    try {
+      const section = await createSection({
+        termId: newSection.term,
+        sectionCode: newSection.name.toUpperCase(),
+      });
+      setSections([...sections, section]);
+      setNewSection({ ...newSection, name: "" });
+      setStructureMessage("Section created.");
+    } catch {
+      setStructureMessage("Unable to create section.");
+    }
   };
-  const setActiveTerm = (id: string) => {
-    saveRecords(
-      "terms",
-      terms.map((item) => ({
-        ...item,
-        status:
-          item.id === id
-            ? "active"
-            : item.status === "active"
-              ? "historical"
-              : item.status,
-      })),
-    );
-    setRevision(revision + 1);
+  const setActiveTerm = async (id: string) => {
+    try {
+      const structure = await activateAcademicTerm(id);
+      setTerms(structure.terms);
+      setSections(structure.sections);
+      setStructureMessage("Academic term updated.");
+    } catch {
+      setStructureMessage("Unable to update academic term.");
+    }
   };
-  const addAccount = () => {
+  const addAssignment = async () => {
+    if (!newAssignment.studentId || !newAssignment.sectionId) return;
+    try {
+      await assignStudentToSection({
+        studentId: newAssignment.studentId,
+        sectionId: newAssignment.sectionId,
+        yearLevel: Number(newAssignment.yearLevel),
+      });
+      const data = await getAssignmentData();
+      setStudents(data.students);
+      setStructureMessage("Student assigned to section.");
+    } catch (error) {
+      setStructureMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to assign student to section.",
+      );
+    }
+  };
+  const addDevice = async () => {
+    if (!newDevice.deviceUid) return;
+    try {
+      const device = await registerDevice(newDevice);
+      setDevices((current) => [device, ...current]);
+      setNewDevice({ officerId: "", deviceUid: "", deviceModel: "" });
+      setStructureMessage("Device registered as pending.");
+    } catch {
+      setStructureMessage("Unable to register device. Check its UID.");
+    }
+  };
+  const updateDeviceStatus = async (
+    device: AuthorizedDevice,
+    status: AuthorizedDevice["status"],
+  ) => {
+    try {
+      const updated = await setDeviceStatus({
+        deviceId: device.id,
+        status,
+        administratorId: session.userId,
+      });
+      setDevices((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setStructureMessage(`Device marked ${status}.`);
+    } catch {
+      setStructureMessage("Unable to update device status.");
+    }
+  };
+  const addAccount = async () => {
+    if (isSupabaseConfigured) {
+      try {
+        await createSupabaseAccount({
+          email: newAccount.email,
+          password: newAccount.password,
+          firstName: newAccount.firstName,
+          lastName: newAccount.lastName,
+          studentNumber: newAccount.studentNumber,
+          role: newAccount.role,
+        });
+        setUsers(await getAdminAccounts());
+        setAccountMessage("Account created.");
+        setNewAccount({
+          username: "",
+          email: "",
+          password: "",
+          firstName: "",
+          lastName: "",
+          studentNumber: "",
+          role: "student",
+        });
+      } catch (error) {
+        setAccountMessage(
+          error instanceof Error
+            ? error.message
+            : "Unable to create account.",
+        );
+      }
+      return;
+    }
     const result = createAdminAccount(newAccount);
     setAccountMessage(result.error ?? "Account created.");
     if (!result.error)
-      setNewAccount({ username: "", email: "", password: "", role: "student" });
+      setNewAccount({
+        username: "",
+        email: "",
+        password: "",
+        firstName: "",
+        lastName: "",
+        studentNumber: "",
+        role: "student",
+      });
     setRevision(revision + 1);
+  };
+  const toggleAccount = async (user: User) => {
+    const nextStatus = user.status !== "active";
+    try {
+      if (isSupabaseConfigured) {
+        await setAccountActive(user.id, nextStatus);
+      } else {
+        const nextUsers = users.map((item) =>
+          item.id === user.id
+            ? {
+                ...item,
+                status: (nextStatus ? "active" : "inactive") as User["status"],
+              }
+            : item,
+        );
+        saveRecords("users", nextUsers);
+      }
+      setUsers((current) =>
+        current.map((item) =>
+          item.id === user.id
+            ? { ...item, status: nextStatus ? "active" : "inactive" }
+            : item,
+        ),
+      );
+      setAccountMessage(nextStatus ? "Account activated." : "Account deactivated.");
+    } catch {
+      setAccountMessage("Unable to update account status.");
+    }
   };
   const signOut = () => {
     logout();
@@ -178,6 +369,15 @@ const AdminDashboardPage = ({
             <IonSegmentButton value="devices">Devices</IonSegmentButton>
           </IonSegment>
         </div>
+        <IonToast
+          isOpen={!!structureMessage}
+          message={structureMessage}
+          duration={2400}
+          color={
+            structureMessage.startsWith("Unable") ? "danger" : "success"
+          }
+          onDidDismiss={() => setStructureMessage("")}
+        />
         {tab === "overview" && (
           <div className="stat-grid">
             <IonCard>
@@ -218,11 +418,54 @@ const AdminDashboardPage = ({
                       <h3>{user.username}</h3>
                       <p>{user.email}</p>
                     </IonLabel>
-                    <IonBadge slot="end">{user.roles.join(", ")}</IonBadge>
+                    <IonBadge color={user.status === "active" ? "success" : "medium"}>
+                      {user.status}
+                    </IonBadge>
+                    <IonButton
+                      slot="end"
+                      fill="outline"
+                      color={user.status === "active" ? "danger" : "success"}
+                      onClick={() => void toggleAccount(user)}
+                    >
+                      {user.status === "active" ? "Deactivate" : "Activate"}
+                    </IonButton>
                   </IonItem>
                 ))}
               </IonList>
               <div className="form-grid">
+                <IonInput
+                  label="First name"
+                  labelPlacement="stacked"
+                  value={newAccount.firstName}
+                  onIonInput={(event) =>
+                    setNewAccount({
+                      ...newAccount,
+                      firstName: event.detail.value ?? "",
+                    })
+                  }
+                />
+                <IonInput
+                  label="Last name"
+                  labelPlacement="stacked"
+                  value={newAccount.lastName}
+                  onIonInput={(event) =>
+                    setNewAccount({
+                      ...newAccount,
+                      lastName: event.detail.value ?? "",
+                    })
+                  }
+                />
+                <IonInput
+                  label="Student number"
+                  labelPlacement="stacked"
+                  value={newAccount.studentNumber}
+                  onIonInput={(event) =>
+                    setNewAccount({
+                      ...newAccount,
+                      studentNumber: event.detail.value ?? "",
+                    })
+                  }
+                />
                 <IonInput
                   label="Username"
                   labelPlacement="stacked"
@@ -280,7 +523,9 @@ const AdminDashboardPage = ({
                   </IonSelectOption>
                 </IonSelect>
               </div>
-              <IonButton onClick={addAccount}>Create account</IonButton>
+              <IonButton onClick={() => void addAccount()}>
+                Create account
+              </IonButton>
               <IonToast
                 isOpen={!!accountMessage}
                 message={accountMessage}
@@ -437,6 +682,57 @@ const AdminDashboardPage = ({
               <IonCardTitle>Student profiles</IonCardTitle>
             </IonCardHeader>
             <IonCardContent>
+              <div className="form-grid">
+                <IonSelect
+                  label="Student"
+                  labelPlacement="stacked"
+                  value={newAssignment.studentId}
+                  onIonChange={(event) =>
+                    setNewAssignment({
+                      ...newAssignment,
+                      studentId: event.detail.value as string,
+                    })
+                  }
+                >
+                  {students.map((student) => (
+                    <IonSelectOption key={student.id} value={student.id}>
+                      {student.firstName} {student.lastName} · {student.studentNumber}
+                    </IonSelectOption>
+                  ))}
+                </IonSelect>
+                <IonSelect
+                  label="Section"
+                  labelPlacement="stacked"
+                  value={newAssignment.sectionId}
+                  onIonChange={(event) =>
+                    setNewAssignment({
+                      ...newAssignment,
+                      sectionId: event.detail.value as string,
+                    })
+                  }
+                >
+                  {sections.map((section) => (
+                    <IonSelectOption key={section.id} value={section.id}>
+                      {section.name} · {terms.find((term) => term.id === section.academicTermId)?.academicYear}
+                    </IonSelectOption>
+                  ))}
+                </IonSelect>
+                <IonInput
+                  type="number"
+                  label="Year level"
+                  labelPlacement="stacked"
+                  value={newAssignment.yearLevel}
+                  onIonInput={(event) =>
+                    setNewAssignment({
+                      ...newAssignment,
+                      yearLevel: event.detail.value ?? "1",
+                    })
+                  }
+                />
+              </div>
+              <IonButton onClick={() => void addAssignment()}>
+                Assign student
+              </IonButton>
               <IonList>
                 {students.map((student) => (
                   <IonItem key={student.id}>
@@ -464,6 +760,53 @@ const AdminDashboardPage = ({
               <IonCardTitle>Simulated devices</IonCardTitle>
             </IonCardHeader>
             <IonCardContent>
+              <div className="form-grid">
+                <IonSelect
+                  label="Assigned officer"
+                  labelPlacement="stacked"
+                  value={newDevice.officerId}
+                  onIonChange={(event) =>
+                    setNewDevice({
+                      ...newDevice,
+                      officerId: event.detail.value as string,
+                    })
+                  }
+                >
+                  <IonSelectOption value="">Unassigned</IonSelectOption>
+                  {users
+                    .filter((user) => user.roles.includes("csg_officer"))
+                    .map((user) => (
+                      <IonSelectOption key={user.id} value={user.id}>
+                        {user.email}
+                      </IonSelectOption>
+                    ))}
+                </IonSelect>
+                <IonInput
+                  label="Device UID"
+                  labelPlacement="stacked"
+                  value={newDevice.deviceUid}
+                  onIonInput={(event) =>
+                    setNewDevice({
+                      ...newDevice,
+                      deviceUid: event.detail.value ?? "",
+                    })
+                  }
+                />
+                <IonInput
+                  label="Device model"
+                  labelPlacement="stacked"
+                  value={newDevice.deviceModel}
+                  onIonInput={(event) =>
+                    setNewDevice({
+                      ...newDevice,
+                      deviceModel: event.detail.value ?? "",
+                    })
+                  }
+                />
+              </div>
+              <IonButton onClick={() => void addDevice()}>
+                Register device
+              </IonButton>
               <IonList>
                 {devices.map((device) => (
                   <IonItem key={device.id}>
@@ -476,11 +819,39 @@ const AdminDashboardPage = ({
                     <IonBadge
                       slot="end"
                       color={
-                        device.status === "authorized" ? "success" : "warning"
+                        device.status === "authorized"
+                          ? "success"
+                          : device.status === "revoked" ||
+                              device.status === "lost"
+                            ? "danger"
+                            : "warning"
                       }
                     >
                       {device.status}
                     </IonBadge>
+                    {device.status === "pending" && (
+                      <IonButton
+                        slot="end"
+                        fill="outline"
+                        onClick={() =>
+                          void updateDeviceStatus(device, "authorized")
+                        }
+                      >
+                        Authorize
+                      </IonButton>
+                    )}
+                    {device.status === "authorized" && (
+                      <IonButton
+                        slot="end"
+                        fill="outline"
+                        color="danger"
+                        onClick={() =>
+                          void updateDeviceStatus(device, "revoked")
+                        }
+                      >
+                        Revoke
+                      </IonButton>
+                    )}
                   </IonItem>
                 ))}
               </IonList>

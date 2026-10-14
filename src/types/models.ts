@@ -62,7 +62,7 @@ export interface AuthorizedDevice {
   deviceIdentifier: string;
   assignedUserId: string;
   platform: "Android" | "iOS" | "Browser simulation";
-  status: "pending" | "authorized" | "revoked" | "inactive";
+  status: "pending" | "authorized" | "revoked" | "lost" | "replaced";
   authorizedBy: string;
   authorizedAt?: string;
   revokedAt?: string;

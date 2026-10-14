@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   IonBadge,
   IonButton,
@@ -24,7 +24,10 @@ import {
   logout,
   switchRole,
 } from "../services/authService";
-import { getRecords } from "../services/storageService";
+import {
+  getOfficerDashboardData,
+  type OfficerDashboardData,
+} from "../services/officerService";
 import type { DemoSession } from "../types/models";
 import "./AppPages.css";
 
@@ -36,12 +39,31 @@ const OfficerDashboardPage = ({
   onSessionChange: (session: DemoSession | null) => void;
 }) => {
   const [search, setSearch] = useState("");
-  const terms = getRecords("terms");
+  const [data, setData] = useState<OfficerDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setError("");
+    void getOfficerDashboardData(session.userId)
+      .then((next) => {
+        if (mounted) setData(next);
+      })
+      .catch(() => {
+        if (mounted) setError("Unable to load officer records.");
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [session.userId]);
+  const terms = data?.terms ?? [];
   const currentTerm = terms.find((term) => term.status === "active");
-  const devices = getRecords("devices").filter(
-    (device) => device.assignedUserId === session.userId,
-  );
-  const students = getRecords("students").filter((student) =>
+  const devices = data?.devices ?? [];
+  const students = (data?.students ?? []).filter((student) =>
     `${student.firstName} ${student.lastName} ${student.studentNumber}`
       .toLowerCase()
       .includes(search.toLowerCase()),
@@ -51,6 +73,25 @@ const OfficerDashboardPage = ({
     logout();
     onSessionChange(null);
   };
+  if (loading)
+    return (
+      <IonPage>
+        <IonContent>
+          <div className="empty-state">Loading officer records...</div>
+        </IonContent>
+      </IonPage>
+    );
+  if (error)
+    return (
+      <IonPage>
+        <IonContent>
+          <div className="empty-state">
+            <h2>Records unavailable</h2>
+            <p>{error}</p>
+          </div>
+        </IonContent>
+      </IonPage>
+    );
   return (
     <IonPage>
       <IonHeader>
@@ -97,7 +138,7 @@ const OfficerDashboardPage = ({
           <IonCard>
             <IonCardContent>
               <span className="stat-label">STUDENTS</span>
-              <strong>{getRecords("students").length}</strong>
+              <strong>{data?.students.length ?? 0}</strong>
             </IonCardContent>
           </IonCard>
           <IonCard>

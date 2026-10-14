@@ -15,6 +15,7 @@ import {
   IonToast,
 } from "@ionic/react";
 import { login, registerStudent } from "../services/authService";
+import { isSupabaseConfigured } from "../lib/supabase";
 import type { DemoSession } from "../types/models";
 import "./AppPages.css";
 
@@ -35,10 +36,10 @@ const LoginPage = ({
     lastName: "",
     confirmPassword: "",
   });
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (mode === "login") {
-      const result = login(username, password);
+      const result = await login(username, password);
       if (result.session) onLogin(result.session);
       else setError(result.error ?? "Unable to sign in.");
       return;
@@ -102,7 +103,9 @@ const LoginPage = ({
             <IonCardHeader>
               <IonCardSubtitle>
                 {mode === "login"
-                  ? "Temporary demonstration"
+                  ? isSupabaseConfigured
+                    ? "Supabase authentication"
+                    : "Temporary demonstration"
                   : "Student self-registration"}
               </IonCardSubtitle>
               <IonCardTitle>
@@ -114,14 +117,21 @@ const LoginPage = ({
             <IonCardContent>
               <form onSubmit={submit}>
                 <IonItem>
-                  <IonLabel position="stacked">Username</IonLabel>
+                  <IonLabel position="stacked">
+                    {isSupabaseConfigured ? "Email" : "Username"}
+                  </IonLabel>
                   <IonInput
                     required
+                    type={isSupabaseConfigured ? "email" : "text"}
                     value={username}
                     onIonInput={(event) =>
                       setUsername(event.detail.value ?? "")
                     }
-                    placeholder="e.g. maria.santos"
+                    placeholder={
+                      isSupabaseConfigured
+                        ? "you@example.edu"
+                        : "e.g. maria.santos"
+                    }
                   />
                 </IonItem>
                 {mode === "signup" && (
@@ -226,20 +236,19 @@ const LoginPage = ({
               {mode === "login" ? (
                 <>
                   <p className="helper-text">
-                    Accounts: <br />
-                    <strong>maria.santos</strong> / <strong>student123</strong>
-                    <br />
-                    <strong>jordan.reyes</strong> / <strong>officer123</strong>
-                    <br />
-                    <strong>alex.delacruz</strong> / <strong>admin123</strong>.
+                    {isSupabaseConfigured
+                      ? "Use the email and password from your Supabase Auth account."
+                      : "Accounts: maria.santos / student123, jordan.reyes / officer123, alex.delacruz / admin123."}
                   </p>
-                  <IonButton
-                    fill="clear"
-                    expand="block"
-                    onClick={() => setMode("signup")}
-                  >
-                    New BSIT student? Sign up
-                  </IonButton>
+                  {!isSupabaseConfigured && (
+                    <IonButton
+                      fill="clear"
+                      expand="block"
+                      onClick={() => setMode("signup")}
+                    >
+                      New BSIT student? Sign up
+                    </IonButton>
+                  )}
                 </>
               ) : (
                 <IonButton
@@ -254,7 +263,9 @@ const LoginPage = ({
           </IonCard>
           <IonText color="medium">
             <small>
-              Local demo only. This is not production authentication.
+              {isSupabaseConfigured
+                ? "Authentication is provided by Supabase."
+                : "Local demo only. This is not production authentication."}
             </small>
           </IonText>
         </div>

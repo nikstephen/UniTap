@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   IonBadge,
   IonButton,
@@ -17,7 +18,10 @@ import {
   IonToolbar,
 } from "@ionic/react";
 import { getRoleOptions, logout, switchRole } from "../services/authService";
-import { getRecords } from "../services/storageService";
+import {
+  getStudentDashboardData,
+  type StudentDashboardData,
+} from "../services/studentService";
 import type { DemoSession } from "../types/models";
 import "./AppPages.css";
 
@@ -28,11 +32,49 @@ const StudentDashboardPage = ({
   session: DemoSession;
   onSessionChange: (session: DemoSession | null) => void;
 }) => {
-  const student = getRecords("students").find(
-    (item) => item.userId === session.userId,
-  );
-  const terms = getRecords("terms");
-  const sections = getRecords("sections");
+  const [data, setData] = useState<StudentDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setError("");
+    void getStudentDashboardData(session.userId)
+      .then((next) => {
+        if (mounted) setData(next);
+      })
+      .catch(() => {
+        if (mounted) setError("Unable to load your student profile.");
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [session.userId]);
+  if (loading)
+    return (
+      <IonPage>
+        <IonContent>
+          <div className="empty-state">Loading your student profile...</div>
+        </IonContent>
+      </IonPage>
+    );
+  if (error)
+    return (
+      <IonPage>
+        <IonContent>
+          <div className="empty-state">
+            <h2>Profile unavailable</h2>
+            <p>{error}</p>
+          </div>
+        </IonContent>
+      </IonPage>
+    );
+  const student = data?.student;
+  const terms = data?.terms ?? [];
+  const sections = data?.sections ?? [];
   if (!student)
     return (
       <IonPage>
@@ -46,9 +88,7 @@ const StudentDashboardPage = ({
     );
   const term = terms.find((item) => item.id === student.currentAcademicTermId);
   const section = sections.find((item) => item.id === student.currentSectionId);
-  const history = getRecords("assignments").filter(
-    (item) => item.studentId === student.id,
-  );
+  const history = data?.history ?? [];
   const roles = getRoleOptions(session.userId);
   const leave = () => {
     logout();

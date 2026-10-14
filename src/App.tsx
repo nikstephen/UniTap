@@ -6,7 +6,7 @@ import LoginPage from "./pages/LoginPage";
 import StudentDashboardPage from "./pages/StudentDashboardPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
 import OfficerDashboardPage from "./pages/OfficerDashboardPage";
-import { getSession } from "./services/authService";
+import { restoreSession } from "./services/authService";
 import { initializeStorage } from "./services/storageService";
 import type { DemoSession } from "./types/models";
 
@@ -55,12 +55,20 @@ const Dashboard = ({
 };
 
 const AppRoutes = () => {
-  const [session, setSession] = useState<DemoSession | null>(null);
+  const [session, setSession] = useState<DemoSession | null | undefined>(
+    undefined,
+  );
   const navigate = useNavigate();
   const location = useLocation();
   useEffect(() => {
     initializeStorage();
-    setSession(getSession());
+    let mounted = true;
+    void restoreSession().then((next) => {
+      if (mounted) setSession(next);
+    });
+    return () => {
+      mounted = false;
+    };
   }, []);
   useEffect(() => {
     if (session && location.pathname === "/login")
@@ -74,6 +82,7 @@ const AppRoutes = () => {
     setSession(next);
     if (!next) navigate("/login", { replace: true });
   };
+  if (session === undefined) return null;
   return (
     <IonRouterOutlet>
       <Route

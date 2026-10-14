@@ -1,0 +1,240 @@
+{
+  "cleanup": {
+    "dropTypesIfExist": [
+      {
+        "name": "user_role_enum",
+        "cascade": true
+      },
+      {
+        "name": "nfc_status_enum",
+        "cascade": true
+      }
+    ]
+  },
+  "enums": {
+    "user_role_enum": [
+      "student",
+      "csg_officer",
+      "csg_admin"
+    ],
+    "nfc_status_enum": [
+      "active",
+      "deactivated",
+      "lost",
+      "replaced"
+    ]
+  },
+  "tables": {
+    "profiles": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "primaryKey": true,
+          "references": {
+            "table": "auth.users",
+            "column": "id",
+            "onDelete": "cascade"
+          }
+        },
+        "student_number": {
+          "type": "varchar(50)",
+          "unique": true,
+          "nullable": true
+        },
+        "first_name": {
+          "type": "varchar(100)",
+          "nullable": false
+        },
+        "last_name": {
+          "type": "varchar(100)",
+          "nullable": false
+        },
+        "email": {
+          "type": "varchar(255)",
+          "unique": true,
+          "nullable": false
+        },
+        "is_active": {
+          "type": "boolean",
+          "default": true
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "user_roles": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "primaryKey": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "type": "uuid",
+          "references": {
+            "table": "profiles",
+            "column": "id",
+            "onDelete": "cascade"
+          }
+        },
+        "role": {
+          "type": "user_role_enum",
+          "nullable": false
+        }
+      },
+      "constraints": [
+        {
+          "type": "unique",
+          "columns": [
+            "user_id",
+            "role"
+          ]
+        }
+      ]
+    },
+    "academic_terms": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "primaryKey": true,
+          "default": "gen_random_uuid()"
+        },
+        "school_year": {
+          "type": "varchar(20)",
+          "nullable": false,
+          "example": "2026-2027"
+        },
+        "semester": {
+          "type": "varchar(20)",
+          "nullable": false,
+          "example": "1st Semester"
+        },
+        "is_current": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "sections": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "primaryKey": true,
+          "default": "gen_random_uuid()"
+        },
+        "term_id": {
+          "type": "uuid",
+          "references": {
+            "table": "academic_terms",
+            "column": "id",
+            "onDelete": "cascade"
+          }
+        },
+        "section_code": {
+          "type": "varchar(20)",
+          "nullable": false,
+          "example": "4F5"
+        }
+      }
+    },
+    "student_section_history": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "primaryKey": true,
+          "default": "gen_random_uuid()"
+        },
+        "student_id": {
+          "type": "uuid",
+          "references": {
+            "table": "profiles",
+            "column": "id",
+            "onDelete": "cascade"
+          }
+        },
+        "section_id": {
+          "type": "uuid",
+          "references": {
+            "table": "sections",
+            "column": "id"
+          }
+        },
+        "year_level": {
+          "type": "integer",
+          "nullable": false
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "authorized_devices": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "primaryKey": true,
+          "default": "gen_random_uuid()"
+        },
+        "officer_id": {
+          "type": "uuid",
+          "references": {
+            "table": "profiles",
+            "column": "id"
+          }
+        },
+        "device_uid": {
+          "type": "varchar(255)",
+          "unique": true,
+          "nullable": false
+        },
+        "device_model": {
+          "type": "varchar(100)",
+          "nullable": true
+        },
+        "is_authorized": {
+          "type": "boolean",
+          "default": false
+        },
+        "authorized_at": {
+          "type": "timestamptz",
+          "nullable": true
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    },
+    "system_audit_logs": {
+      "columns": {
+        "id": {
+          "type": "uuid",
+          "primaryKey": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "type": "uuid",
+          "references": {
+            "table": "profiles",
+            "column": "id"
+          }
+        },
+        "action": {
+          "type": "varchar(100)",
+          "nullable": false
+        },
+        "details": {
+          "type": "jsonb",
+          "nullable": true
+        },
+        "created_at": {
+          "type": "timestamptz",
+          "default": "now()"
+        }
+      }
+    }
+  }
+}
